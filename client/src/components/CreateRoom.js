@@ -5,6 +5,8 @@ import Board from "./Board";
 import toast from "react-hot-toast";
 import { generateMerkleTree, generateCard, getMatrix } from "../services/TableService";
 import { isWinningCombination } from "../globals";
+let _gameId;
+
 const CreateRoom = ({setView}) => {
 	const mockTable = [
 		[0, 1, 2, 3, 4],
@@ -27,7 +29,6 @@ const CreateRoom = ({setView}) => {
     const [lastBlock, setLastBlock] = useState(0)
     const [accusationBlock, setAccusationBlock] = useState(0)
     const re = /^[0-9\b]+$/;
-
 	const createGame = () => {
 		const _maxPlayers = parseInt(maxPlayers);
 		const _ethBet = parseInt(ethBet);
@@ -43,10 +44,10 @@ const CreateRoom = ({setView}) => {
         let merkleTree = generateMerkleTree(_card);
         console.log(merkleTree[merkleTree.length - 1][0]);
 		contract.methods.createGame(_maxPlayers, _ethBet, `0x${merkleTree[merkleTree.length - 1][0]}`).send({ from: accounts[0], gas: 1000000 }).then((logArray) => {
-			const newGameId = parseInt(logArray.events.GameCreated.returnValues._gameId);
+			_gameId = parseInt(logArray.events.GameCreated.returnValues._gameId);
             console.log(logArray);
-            setGameId(newGameId);
-            console.log("Game ID:", newGameId);
+            setGameId(_gameId);
+            console.log("Game ID:", _gameId);
 			setWaiting(true);
 			toast.success("Gioco creato con successo!");
 		}).catch((error) => {
@@ -69,36 +70,38 @@ const CreateRoom = ({setView}) => {
 		// 	// handle more logic to print board
 		// });
 	}
+    const handleConfermaDenuncia = (event) => {
+        console.log("handleConfermaDenuncia", _gameId)
+
+        setDenunciato((prevDenunciato) => {
+            if (prevDenunciato) {
+                console.log(_gameId)
+                console.log("poco prima di rimuovere creatore:",parseInt(_gameId));
+                contract.methods.rimuoviCreator(parseInt(_gameId), true).send({ from: accounts[0], gas: 1000000 }).then((logArray) => {
+                    console.log(logArray);
+                    toast.success("Il creatore è stato rimosso con successo!");
+                }).catch((error) => {
+                    console.log(error);
+                    toast.error(`Error removing creator from game ${String(error)}`);
+                });
+            } else {
+                console.log("Denuncia non confermata");
+                contract.methods.rimuoviCreator(parseInt(gameId), false).send({ from: accounts[0], gas: 1000000 }).then((logArray) => {
+                    console.log(logArray);
+                }).catch((error) => {
+                    console.log(error);
+                });
+            }
+            return prevDenunciato; // Ritorna il valore corrente di denunciato
+        });
+    };
+    const handleDenunciaCreator = (event) => {
+        setDenunciato(true);
+        console.log("Denuncia ricevuta e il valore di denunciato è:", true);
+        console.log("handleDenunciaCreator", _gameId)
+    };
 
     useEffect(() => {
-        const handleDenunciaCreator = (event) => {
-            setDenunciato(true);
-            console.log("Denuncia ricevuta e il valore di denunciato è:", true);
-        };
-
-        const handleConfermaDenuncia = (event) => {
-            setDenunciato((prevDenunciato) => {
-                if (prevDenunciato) {
-                    console.log("poco prima di rimuovere creatore:",parseInt(gameId));
-                    contract.methods.rimuoviCreator(parseInt(gameId), true).send({ from: accounts[0], gas: 1000000 }).then((logArray) => {
-                        console.log(logArray);
-                        toast.success("Il creatore è stato rimosso con successo!");
-                    }).catch((error) => {
-                        console.log(error);
-                        toast.error(`Error removing creator from game ${String(error)}`);
-                    });
-                } else {
-                    console.log("Denuncia non confermata");
-                    contract.methods.rimuoviCreator(parseInt(gameId), false).send({ from: accounts[0], gas: 1000000 }).then((logArray) => {
-                        console.log(logArray);
-                    }).catch((error) => {
-                        console.log(error);
-                    });
-                }
-                return prevDenunciato; // Ritorna il valore corrente di denunciato
-            });
-        };
-
         try {
             contract._events.GameStarted().on('data', event => {
                 setGameStarted(true);
@@ -113,7 +116,6 @@ const CreateRoom = ({setView}) => {
             contract._events.ConfermaDenuncia().on('data', handleConfermaDenuncia).on('error', console.error);
         } catch {}
     }, [contract]);
-
 
 
     useEffect(() => {
