@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { Button, Typography, CircularProgress } from "@mui/material";
 import useEth from "../contexts/EthContext/useEth";
 import toast from "react-hot-toast";
+import Board from "./Board";
+import { generateMerkleTree, generateCard, getMatrix } from "../services/TableService";
 
 
 const JoinRandomGame = ({ setView }) => {
@@ -13,10 +15,16 @@ const JoinRandomGame = ({ setView }) => {
   const [infoFetched, setInfoFetched] = useState(false);
   const [loading, setLoading] = useState(false);
   const [waitingForPlayers, setWaitingForPlayers] = useState(false);
-
+  const [card, setCard] = useState();
+  const [cardMatrix, setCardMatrix] = useState();
+  const [countMissednumbers, setCountMissednumbers] = useState(0);
+  const [countNumEstracted, setCountNumEstracted] = useState(0);
   const joinRandomGame = () => {
     setLoading(true);
-    contract.methods.joinGame(0).send({ from: accounts[0], gas: 20000000 }).then((logArray) => {
+    let _card = generateCard();
+    setCard(_card);
+    let merkleTree = generateMerkleTree(_card);
+    contract.methods.joinGame(0,`0x${merkleTree[merkleTree.length - 1][0]}`).send({ from: accounts[0], gas: 20000000 }).then((logArray) => {
       console.log(parseInt(logArray.events.GameJoined.returnValues._gameId));
       setLoading(false);
       setWaitingForPlayers(true); // Show waiting message after joining

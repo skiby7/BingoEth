@@ -52,6 +52,14 @@ contract Bingo {
 
     event GameCreated(uint256 indexed _gameId, uint256 _maxJoiners,uint256 _totalJoiners); //  Event to log game creation
 
+    event EventDenunciaCreator(
+        uint256 indexed _gameId,
+        address _creator
+    );
+    event ConfermaDenuncia(
+        uint256 indexed _gameId,
+        address _accuser
+    );
     //TODO: implementa piu persone
     event GameJoined(
         uint256 indexed _gameId,
@@ -355,6 +363,9 @@ contract Bingo {
     }
 
 
+
+
+
     function joinGame(uint256 _gameId, bytes32 _cardMerkleRoot) public {
         require(elencoGiochiDisponibili.length > 0, "No available games!");
         uint256 chosenGameId;
@@ -395,6 +406,44 @@ contract Bingo {
             removeFromGiochiDisponibili(chosenGameId);
             emit GameStarted(chosenGameId);
         }
+    }
+    function denunciaCreator(uint256 _gameId) public {
+        require(_gameId > 0, "Game id is negative!");
+        require(gameList[_gameId].creator != msg.sender, "Creator cannot accuse himself!");
+        require(gameList[_gameId].accuser == address(0), "Accusation already made!");
+
+        if (gameList[_gameId].accuser == address(0)) { // if there isn't an accuser
+            // set the accuser and the accusationTime:
+            gameList[_gameId].accuser = msg.sender;
+            gameList[_gameId].accusationTime = block.number + 5;
+
+            // send the event of the accusation
+            emit EventDenunciaCreator(
+                 _gameId,
+                gameList[_gameId].creator
+            );
+
+        }
+    }
+    function RiDenunciaCreator(uint256 _gameId) public {
+        require(_gameId > 0, "Game id is negative!");
+        require(gameList[_gameId].creator != msg.sender, "Creator cannot accuse himself!");
+        require(gameList[_gameId].accuser != address(0), "No accusation made!");
+
+        if (gameList[_gameId].accuser != address(0)) { // if there is an accuser
+            // set the accuser and the accusationTime:
+            gameList[_gameId].accuser = address(0);
+            gameList[_gameId].accusationTime = 0;
+
+            // send the event of the accusation
+            emit ConfermaDenuncia(
+                 _gameId,
+                msg.sender
+            );
+
+        }
+
+
     }
 
 

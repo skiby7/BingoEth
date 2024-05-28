@@ -25,6 +25,8 @@ const JoinGame = ({ setView }) => {
   const [gameStarted, setGameStarted] = useState(false);
   const [card, setCard] = useState();
   const [cardMatrix, setCardMatrix] = useState();
+  const [gameEnded, setGameEnded] = useState(false);
+  const [removed, setRemoved] = useState(false);
   const re = /^[0-9\b]+$/;
 
   const joinGame = () => {
@@ -38,6 +40,21 @@ const JoinGame = ({ setView }) => {
         console.log(parseInt(logArray.events.GameJoined.returnValues._gameId));
         setLoading(false);
         setWaitingForPlayers(true);
+      })
+      .catch((error) => {
+        console.error("Error joining game:", error);
+        setLoading(false);
+        toast.error("Non posso entrare nel gioco selezionato!")
+        setGameId("")
+    });
+  };
+  const denunciaCreator = () => {
+    contract.methods.denunciaCreator(parseInt(gameId)).send({ from: accounts[0], gas: 20000000 })
+      .then((logArray) => {
+        console.log(parseInt(logArray.events.RemoveCreator.returnValues._gameId));
+        if(parseInt(logArray.events.RemoveCreator.returnValues._result)){//se e' true allora il creatore e' stato rimosso dal game quindi termino il gioco
+            toast.success("Il creatore e' stato denunciato!");
+        }
       })
       .catch((error) => {
         console.error("Error joining game:", error);
@@ -75,6 +92,35 @@ const JoinGame = ({ setView }) => {
           setGameStarted(true)
       }).on('error', console.error);
     } catch {}
+    try {
+        contract._events.EventDenunciaCreator().on('data', event => {
+            if(parseInt(event.returnValues._gameId) === parseInt(gameId)){
+                const timeOut =  setTimeout(() => {
+                    contract.methods.RiDenunciaCreator(parseInt(gameId)).send({ from: accounts[0], gas: 20000000 })
+                        .then((logArray) => {
+                            console.log(parseInt(logArray.events.ConfermaDenuncia.returnValues._gameId));
+
+                        }).catch((error) => {
+                            console.error("Error joining game:", error);
+                            setLoading(false);
+                            toast.error("Non posso entrare nel gioco selezionato!")
+                            setGameId("")
+                    });
+                }, 10000);
+                clearTimeout(timeOut);
+            }
+        }).on('error', console.error);
+    }catch {}
+    try {
+        contract._events.CreatorRemoved().on('data', event => {
+            if(parseInt(logArray.events.RemoveCreator.returnValues._result)){//se e' true allora il creatore e' stato rimosso dal game quindi termino il gioco
+                setGameEnded(true);
+                //TODO: aggiungi schermata per dire che il giocatore ha vinto dei soldi. il totale e' ethBet/totaleJoiners
+                setView("");//torno alla schermata iniziale
+                }
+        }).on('error', console.error);
+      } catch {}
+
   }, [contract]);
 
   return (
@@ -151,7 +197,17 @@ const JoinGame = ({ setView }) => {
           )}
         </div>
       ) : (
-        <Board size={5} table={cardMatrix}/>
+        <div>
+    <Board size={5} table={cardMatrix}/>
+    <Button
+                  variant="contained"
+                  onClick={denunciaCreator}
+                  className="dark:bg-blue-500 dark:hover:bg-blue-600 bg-blue-400 hover:bg-blue-500 text-white items-center shadow-xl transition duration-300 dark:disabled:bg-gray-500 disabled:bg-gray-300"
+                  disabled={gameId.trim() === "" || loading || gameId === "0"}
+                >
+                  Denuncia Creator
+                </Button>
+  </div>
     )}
     </div>
   );

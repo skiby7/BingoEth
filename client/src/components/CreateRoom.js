@@ -23,6 +23,9 @@ const CreateRoom = ({setView}) => {
     const [card, setCard] = useState();
     const [cardMatrix, setCardMatrix] = useState();
 	const [result, setResult] = useState()
+    const [denunciato, setDenunciato] = useState(false)
+    const [lastBlock, setLastBlock] = useState(0)
+    const [accusationBlock, setAccusationBlock] = useState(0)
     const re = /^[0-9\b]+$/;
 
 	const createGame = () => {
@@ -73,7 +76,39 @@ const CreateRoom = ({setView}) => {
                 setGameStarted(true)
             }).on('error', console.error);
         } catch {}
+        try {
+            contract._events.EventDenunciaCreator().on('data', event => {
+                // console.log('Event received:', event);
+                // console.log(event.returnValues);
+            setDenunciato(true);
+            lastBlock = events.blockNumber;
+            accusationBlock = events.blockNumber + 5; // 5 blocks dopo la denuncia, poi decidiamo per bene quanto mettere
+            }).on('error', console.error);
+        } catch {}
+        try {
+            contract._events.verificaDenuncia().on('data', event => {
+                // console.log('Event received:', event);
+                // console.log(event.returnValues);
+            if(denunciato){
+                if(accusationBlock >= events.blockNumber){ // if the current block is lower than the accusationBlock
+                    contract.methods.rimuoviCreator(_maxPlayers, _ethBet, `0x${merkleTree[merkleTree.length - 1][0]}`).send({ from: accounts[0], gas: 1000000 }).then((logArray) => {
+                        console.log(logArray)
+                        toast.success("Il creatore è stato rimosso con successo!");
+                    }).catch((error) => {
+                        console.log(error);
+                        toast.error(`Error removing creator from game ${String(error)}`);
+                    });
+                }else{
+                    //nulla
+                }
+            }
+
+
+            }).on('error', console.error);
+        } catch {}
+
     }, [contract]);
+
 
     useEffect(() => {
         console.log(result)
