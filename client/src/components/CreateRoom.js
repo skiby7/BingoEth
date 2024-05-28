@@ -43,8 +43,10 @@ const CreateRoom = ({setView}) => {
         let merkleTree = generateMerkleTree(_card);
         console.log(merkleTree[merkleTree.length - 1][0]);
 		contract.methods.createGame(_maxPlayers, _ethBet, `0x${merkleTree[merkleTree.length - 1][0]}`).send({ from: accounts[0], gas: 1000000 }).then((logArray) => {
-			console.log(logArray)
-			setGameId(parseInt(logArray.events.GameCreated.returnValues._gameId));
+			const newGameId = parseInt(logArray.events.GameCreated.returnValues._gameId);
+            console.log(logArray);
+            setGameId(newGameId);
+            console.log("Game ID:", newGameId);
 			setWaiting(true);
 			toast.success("Gioco creato con successo!");
 		}).catch((error) => {
@@ -69,45 +71,49 @@ const CreateRoom = ({setView}) => {
 	}
 
     useEffect(() => {
-        try {
-            contract._events.GameStarted().on('data', event => {
-                // console.log('Event received:', event);
-                // console.log(event.returnValues);
-                setGameStarted(true)
-            }).on('error', console.error);
-        } catch {}
-        try {
-            contract._events.EventDenunciaCreator().on('data', event => {
-                // console.log('Event received:', event);
-                // console.log(event.returnValues);
+        const handleDenunciaCreator = (event) => {
             setDenunciato(true);
-            lastBlock = events.blockNumber;
-            accusationBlock = events.blockNumber + 5; // 5 blocks dopo la denuncia, poi decidiamo per bene quanto mettere
-            }).on('error', console.error);
-        } catch {}
-        try {
-            contract._events.verificaDenuncia().on('data', event => {
-                // console.log('Event received:', event);
-                // console.log(event.returnValues);
-            if(denunciato){
-                if(accusationBlock >= events.blockNumber){ // if the current block is lower than the accusationBlock
-                    contract.methods.rimuoviCreator(_maxPlayers, _ethBet, `0x${merkleTree[merkleTree.length - 1][0]}`).send({ from: accounts[0], gas: 1000000 }).then((logArray) => {
-                        console.log(logArray)
+            console.log("Denuncia ricevuta e il valore di denunciato è:", true);
+        };
+
+        const handleConfermaDenuncia = (event) => {
+            setDenunciato((prevDenunciato) => {
+                if (prevDenunciato) {
+                    console.log("poco prima di rimuovere creatore:",parseInt(gameId));
+                    contract.methods.rimuoviCreator(parseInt(gameId), true).send({ from: accounts[0], gas: 1000000 }).then((logArray) => {
+                        console.log(logArray);
                         toast.success("Il creatore è stato rimosso con successo!");
                     }).catch((error) => {
                         console.log(error);
                         toast.error(`Error removing creator from game ${String(error)}`);
                     });
-                }else{
-                    //nulla
+                } else {
+                    console.log("Denuncia non confermata");
+                    contract.methods.rimuoviCreator(parseInt(gameId), false).send({ from: accounts[0], gas: 1000000 }).then((logArray) => {
+                        console.log(logArray);
+                    }).catch((error) => {
+                        console.log(error);
+                    });
                 }
-            }
+                return prevDenunciato; // Ritorna il valore corrente di denunciato
+            });
+        };
 
-
+        try {
+            contract._events.GameStarted().on('data', event => {
+                setGameStarted(true);
             }).on('error', console.error);
         } catch {}
 
+        try {
+            contract._events.EventDenunciaCreator().on('data', handleDenunciaCreator).on('error', console.error);
+        } catch {}
+
+        try {
+            contract._events.ConfermaDenuncia().on('data', handleConfermaDenuncia).on('error', console.error);
+        } catch {}
     }, [contract]);
+
 
 
     useEffect(() => {

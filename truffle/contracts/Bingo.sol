@@ -96,7 +96,8 @@ contract Bingo {
 
     event ResolveAccuse(
         uint256 indexed _gameId,
-        address _accuser
+        address _accuser,
+        address _creator
     );
 
     event AmountEthResponse(
@@ -226,17 +227,17 @@ contract Bingo {
         return elencoGiochiDisponibili.length+1;
     }
 
-    function distributePrizetoAll(uint256 _gameId) public {
+    function distributePrizetoAllJoiners(uint256 _gameId) public {
+        require(_gameId > 0, "Game id is negative!");
+        //require(gameList[_gameId].creator == msg.sender, "Only the creator can distribute the prize!");
+        require(gameList[_gameId].ethBalance > 0, "No prize to distribute!");
         info storage game = gameList[_gameId];
         uint256 betAmountPerPlayer = game.ethBalance /game.joiners.length;
         for (uint256 i = 0; i < game.joiners.length; i++) {
             address player = game.joiners[i];
-            if (player != msg.sender) {
+            if (player != msg.sender && player != game.creator) {
                 payable(player).transfer(betAmountPerPlayer);
             }
-        }
-        if (game.creator != msg.sender) {
-            payable(game.creator).transfer(betAmountPerPlayer);
         }
     }
     //returns true if the element is in the array
@@ -442,7 +443,16 @@ contract Bingo {
             );
 
         }
+    }
 
+    function rimuoviCreator(uint256 _gameId, bool response) public{
+        require(_gameId > 0, "Game id is negative!");
+        if(response){
+            distributePrizetoAllJoiners(_gameId);
+            emit GameEnded(_gameId, gameList[_gameId].accuser, gameList[_gameId].creator, 1);
+        }else {
+            emit ResolveAccuse(_gameId,gameList[_gameId].accuser,gameList[_gameId].creator);
+        }
 
     }
 
