@@ -26,8 +26,6 @@ const CreateRoom = ({setView}) => {
     const [cardMatrix, setCardMatrix] = useState();
 	const [result, setResult] = useState()
     const [denunciato, setDenunciato] = useState(false)
-    const [lastBlock, setLastBlock] = useState(0)
-    const [accusationBlock, setAccusationBlock] = useState(0)
     const re = /^[0-9\b]+$/;
 	const createGame = () => {
 		const _maxPlayers = parseInt(maxPlayers);
@@ -43,11 +41,10 @@ const CreateRoom = ({setView}) => {
         setCardMatrix(getMatrix(_card));
         let merkleTree = generateMerkleTree(_card);
         console.log(merkleTree[merkleTree.length - 1][0]);
-		contract.methods.createGame(_maxPlayers, _ethBet, `0x${merkleTree[merkleTree.length - 1][0]}`).send({ from: accounts[0], gas: 1000000 }).then((logArray) => {
+		contract.methods.createGame(_maxPlayers, _ethBet, `0x${merkleTree[merkleTree.length - 1][0]}`).send({ from: accounts[0], gas: 1000000, value: (_ethBet*1000000000000000000) }).then((logArray) => {
 			_gameId = parseInt(logArray.events.GameCreated.returnValues._gameId);
-            console.log(logArray);
+            console.log("ethereum messo con la create :",parseInt(logArray.events.GameCreated.returnValues._eth));
             setGameId(_gameId);
-            console.log("Game ID:", _gameId);
 			setWaiting(true);
 			toast.success("Gioco creato con successo!");
 		}).catch((error) => {
@@ -77,7 +74,7 @@ const CreateRoom = ({setView}) => {
             if (prevDenunciato) {
                 console.log(_gameId)
                 console.log("poco prima di rimuovere creatore:",parseInt(_gameId));
-                contract.methods.rimuoviCreator(parseInt(_gameId), true).send({ from: accounts[0], gas: 1000000 }).then((logArray) => {
+                contract.methods.rimuoviCreator(parseInt(_gameId), true).send({ from: accounts[0], gas: 300000000 }).then((logArray) => {
                     console.log(logArray);
                     toast.success("Il creatore è stato rimosso con successo!");
                 }).catch((error) => {
@@ -86,7 +83,7 @@ const CreateRoom = ({setView}) => {
                 });
             } else {
                 console.log("Denuncia non confermata");
-                contract.methods.rimuoviCreator(parseInt(gameId), false).send({ from: accounts[0], gas: 1000000 }).then((logArray) => {
+                contract.methods.rimuoviCreator(parseInt(gameId), false).send({ from: accounts[0], gas: 300000000 }).then((logArray) => {
                     console.log(logArray);
                 }).catch((error) => {
                     console.log(error);
@@ -100,6 +97,9 @@ const CreateRoom = ({setView}) => {
         console.log("Denuncia ricevuta e il valore di denunciato è:", true);
         console.log("handleDenunciaCreator", _gameId)
     };
+    const handleTransferFailed = (event) => {
+        console.log("Transfer failed", event);
+    }
 
     useEffect(() => {
         try {
@@ -114,6 +114,9 @@ const CreateRoom = ({setView}) => {
 
         try {
             contract._events.ConfermaDenuncia().on('data', handleConfermaDenuncia).on('error', console.error);
+        } catch {}
+        try {
+            contract._events.TransferFailed().on('data', handleTransferFailed).on('error', console.error);
         } catch {}
     }, [contract]);
 

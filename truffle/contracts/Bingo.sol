@@ -50,8 +50,9 @@ contract Bingo {
 /***************************************** */
     event outputerror(string myError); // event: error output
 
-    event GameCreated(uint256 indexed _gameId, uint256 _maxJoiners,uint256 _totalJoiners); //  Event to log game creation
+    event GameCreated(uint256 indexed _gameId, uint256 _maxJoiners,uint256 _totalJoiners,uint256 _eth); //  Event to log game creation
 
+    event TransferFailed(address _player, uint256 _amount, uint256 _gameBalance); // Event to log transfer failure
     event EventDenunciaCreator(
         uint256 indexed _gameId,
         address _creator
@@ -60,14 +61,15 @@ contract Bingo {
         uint256 indexed _gameId,
         address _accuser
     );
-    //TODO: implementa piu persone
+    event RemoveCreator(uint256 gameId, address winner, address loser, uint256 status);
     event GameJoined(
         uint256 indexed _gameId,
         address _creator,
         address _joiner,
         uint256 _maxjoiners,
         uint256 _totalJoiners,
-        uint256 _ethAmount
+        uint256 _ethAmount,
+        uint256 _TotalbetAmount
     );
     event GetInfo(
         uint256 indexed _gameId,
@@ -227,19 +229,7 @@ contract Bingo {
         return elencoGiochiDisponibili.length+1;
     }
 
-    function distributePrizetoAllJoiners(uint256 _gameId) public {
-        require(_gameId > 0, "Game id is negative!");
-        //require(gameList[_gameId].creator == msg.sender, "Only the creator can distribute the prize!");
-        require(gameList[_gameId].ethBalance > 0, "No prize to distribute!");
-        info storage game = gameList[_gameId];
-        uint256 betAmountPerPlayer = game.ethBalance /game.joiners.length;
-        for (uint256 i = 0; i < game.joiners.length; i++) {
-            address player = game.joiners[i];
-            if (player != msg.sender && player != game.creator) {
-                payable(player).transfer(betAmountPerPlayer);
-            }
-        }
-    }
+
     //returns true if the element is in the array
     function contains(address[] memory array, address element) internal pure returns (bool) {
         uint256 length = array.length;
@@ -340,34 +330,33 @@ contract Bingo {
 
         require(_maxJoiners > 0, "Max joiners must be greater than 0");
         require(_betAmount > 0, "Bet amount must be greater than 0");
-
+        require(msg.value/1000000000000000000 == _betAmount, "ETH amount are wrong!");
         uint256 gameID = getIDGame();
         info storage newGame = gameList[gameID];
         newGame.creator = msg.sender;
         newGame.joiners = new address[](0);
         newGame.maxJoiners = _maxJoiners;
         newGame.totalJoiners = 0;
-        newGame.ethBalance = 0;
+        newGame.ethBalance = msg.value;
         newGame.betAmount = _betAmount;
         newGame.creatorMerkleRoot = _cardMerkleRoot;
         newGame.accusationTime = 0;
         newGame.accuser = address(0);
+        require(newGame.ethBalance >= 0, "ETH amount is wrong!");
 
         // Initialize the creator's merkle root mapping
         newGame.joinerMerkleRoots[msg.sender] = 0;
 
         elencoGiochiDisponibili.push(gameID);
 
-        newGame.ethBalance +=  _betAmount;
-
-        emit GameCreated(gameID,newGame.maxJoiners,newGame.totalJoiners);
+        emit GameCreated(gameID,newGame.maxJoiners,newGame.totalJoiners,newGame.ethBalance);
     }
 
 
 
 
 
-    function joinGame(uint256 _gameId, bytes32 _cardMerkleRoot) public {
+    function joinGame(uint256 _gameId, bytes32 _cardMerkleRoot) public payable {
         require(elencoGiochiDisponibili.length > 0, "No available games!");
         uint256 chosenGameId;
         if (_gameId == 0) {
@@ -380,6 +369,7 @@ contract Bingo {
         }
         //check if the game is available and if the player is not the creator
         require(chosenGameId > 0, "Chosen id negative!");
+        require(msg.value/1000000000000000000 == gameList[chosenGameId].betAmount, "ETH amount are wrong!");
         require(gameList[chosenGameId].totalJoiners < gameList[chosenGameId].maxJoiners, "Game already taken!");
         require(gameList[chosenGameId].creator != msg.sender, "You can't join a game created by yourself!");
         require(gameList[chosenGameId].creatorMerkleRoot != _cardMerkleRoot, "Invalid merkle root!");
@@ -392,7 +382,7 @@ contract Bingo {
         //add the player to the game
         gameList[chosenGameId].joiners.push(msg.sender);
         gameList[chosenGameId].totalJoiners++;
-        gameList[chosenGameId].ethBalance += gameList[chosenGameId].betAmount;
+        gameList[chosenGameId].ethBalance += msg.value;
         gameList[chosenGameId].joinerMerkleRoots[msg.sender] = _cardMerkleRoot;
 
         emit GameJoined(
@@ -401,6 +391,7 @@ contract Bingo {
             msg.sender,
             gameList[chosenGameId].maxJoiners,
             gameList[chosenGameId].totalJoiners,
+            gameList[chosenGameId].betAmount,
             gameList[chosenGameId].ethBalance
         );
         if(gameList[chosenGameId].totalJoiners == gameList[chosenGameId].maxJoiners){
@@ -455,6 +446,42 @@ contract Bingo {
         }
 
     }
+    function distributePrizetoAllJoiners(uint256 _gameId) public payable {
+        require(_gameId > 0, "Game id is negative!");
+        //require(gameList[_gameId].ethBalance > 0, "No prize to distribute!");
+        if(gameList[_gameId].ethBalance <= 0){
+            emit TransferFailed(msg.sender, 11,gameList[_gameId].ethBalance);
+            return;
+        }
+        info storage game = gameList[_gameId];
+        uint256 betAmountPerPlayer = game.ethBalance / game.joiners.length;
+        //require(betAmountPerPlayer > 0, "Bet amount per player is zero");
+        if(betAmountPerPlayer <= 0){
+            emit TransferFailed(msg.sender, 22,gameList[_gameId].ethBalance);
+            return;
+        }
+        // Verifica se il contratto ha abbastanza fondi per tutti i trasferimenti
+        require(gameList[_gameId].ethBalance >= game.ethBalance, "Contract balance is less than game balance");
+
+        // Logica per trasferire il premio ai partecipanti
+        for (uint256 i = 0; i < game.joiners.length; i++) {
+            address player = game.joiners[i];
+            if (player != msg.sender && player != game.creator) {
+                // Tentativo di trasferimento, cattura eventuali errori
+                (bool success, ) = payable(player).call{value: betAmountPerPlayer}("");
+                if (!success) {
+                    // Log dell'errore invece di usare require
+                    emit TransferFailed(player, betAmountPerPlayer,gameList[_gameId].ethBalance);
+                }
+            }
+        }
+
+        // Resetta il saldo del gioco
+        game.ethBalance = 0;
+
+        emit RemoveCreator(_gameId, game.accuser, game.creator, 0);
+    }
+
 
 
     // function amountEthDecision(uint256 _gameId, bool _response) public payable {

@@ -3,6 +3,7 @@ import { Button, Typography, CircularProgress, TextField } from "@mui/material";
 import useEth from "../contexts/EthContext/useEth";
 import toast from "react-hot-toast";
 import Board from "./Board";
+import { isWinningCombination } from "../globals";
 import { generateMerkleTree, generateCard, getMatrix } from "../services/TableService";
 
 const JoinGame = ({ setView }) => {
@@ -24,9 +25,11 @@ const JoinGame = ({ setView }) => {
   const [error, setError] = useState("");
   const [gameStarted, setGameStarted] = useState(false);
   const [card, setCard] = useState();
+  const [result, setResult] = useState()
   const [cardMatrix, setCardMatrix] = useState();
   const [gameEnded, setGameEnded] = useState(false);
   const [removed, setRemoved] = useState(false);
+  const [denunciato, setDenunciato] = useState(false);
   const re = /^[0-9\b]+$/;
 
   const joinGame = () => {
@@ -35,9 +38,11 @@ const JoinGame = ({ setView }) => {
     setCard(_card);
     setCardMatrix(getMatrix(_card));
     let merkleTree = generateMerkleTree(_card);
-    contract.methods.joinGame(parseInt(gameId), `0x${merkleTree[merkleTree.length - 1][0]}`).send({ from: accounts[0], gas: 20000000 })
+    contract.methods.joinGame(parseInt(gameId), `0x${merkleTree[merkleTree.length - 1][0]}`).send({ from: accounts[0], gas: 20000000, value: (ethBet*1000000000000000000) })
       .then((logArray) => {
         console.log(parseInt(logArray.events.GameJoined.returnValues._gameId));
+        console.log("ecco il valore da scommettere :",ethBet);
+        console.log("ecco il totale del betamaunt:",parseInt(logArray.events.GameJoined.returnValues._TotalbetAmount));
         setLoading(false);
         setWaitingForPlayers(true);
       })
@@ -57,7 +62,7 @@ const JoinGame = ({ setView }) => {
             contract.methods.RiDenunciaCreator(parseInt(gameId)).send({ from: accounts[0], gas: 20000000 })
                 .then((logArray) => {
                     console.log(parseInt(logArray.events.ConfermaDenuncia.returnValues._gameId));
-
+                    setDenunciato(true);
                 }).catch((error) => {
                     console.error("Error joining game:", error);
                     setLoading(false);
@@ -66,6 +71,7 @@ const JoinGame = ({ setView }) => {
             });
         }, 10000);
         //clearTimeout(timeOut);
+
       })
       .catch((error) => {
         console.error("Error joining game:", error);
@@ -74,6 +80,13 @@ const JoinGame = ({ setView }) => {
         setGameId("")
     });
   };
+  useEffect(() => {
+    console.log(result)
+    if (result && isWinningCombination(result)) {
+        console.log("Bingo!");
+        toast("Bingo!", {icon: '🥳'});
+    }
+}, [result]);
 
 
   const getInfoGame = () => {
@@ -99,20 +112,29 @@ const JoinGame = ({ setView }) => {
     try {
       contract._events.GameStarted().on('data', event => {
           // console.log('Event received:', event);
-          // console.log(event.returnValues);
+            console.log(event.returnValues);
           setGameStarted(true)
       }).on('error', console.error);
     } catch {}
     try {
-        contract._events.CreatorRemoved().on('data', event => {
-            if(parseInt(event.RemoveCreator.returnValues._result)){//se e' true allora il creatore e' stato rimosso dal game quindi termino il gioco
-                setGameEnded(true);
+        contract.events.CreatorRemoved().on('data', event => {
+               if(parseInt(event.returnValues.status) === 0){
+                    setRemoved(true);
+                    setGameEnded(true);
                 //TODO: aggiungi schermata per dire che il giocatore ha vinto dei soldi. il totale e' ethBet/totaleJoiners
                 setView("");//torno alla schermata iniziale
+                }else{
+                    setRemoved(false);
                 }
         }).on('error', console.error);
       } catch {}
-
+      try {
+        contract._events.TransferFailed().on('data', event => {
+            console.log("Transfer failed with address:", event.returnValues._player);
+            console.log("Transfer failed with totalgamebalance:", event.returnValues._gameBalance);
+            console.log("Transfer failed with _amount:", event.returnValues._amount);
+        }).on('error', console.error);
+      } catch {}
   }, [contract]);
 
   return (
@@ -190,7 +212,7 @@ const JoinGame = ({ setView }) => {
         </div>
       ) : (
         <div className="flex items-start gap-4"> {/* Applica flexbox e aggiungi gap tra gli elementi */}
-        <Board size={5} table={cardMatrix}/>
+        <Board size={5} table={cardMatrix} setResult={setResult}/>
         <Button
           variant="contained"
           onClick={denunciaCreator}
