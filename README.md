@@ -64,7 +64,7 @@ To start the project with docker, edit the .env file inside the root of the proj
 export CLIENT_ENV=development
 ```
 
-Here's a recap of all the `.env` files you can setup (it is not mandatory, de defaults values are enough to start the app locally):
+Here's a recap of all the `.env` files you can setup (it is not mandatory, the defaults values are enough to start the app locally):
 
 ```bash
 BingoEth/
